@@ -154,34 +154,51 @@ class MyAlgorithm(threading.Thread):
 
     def getState(self,previous_error,actual_error):
         inc_error = actual_error-previous_error
-        if actual_error[1]>50:
-            self.state = "left"
-        elif actual_error[1]<-50:
+        if actual_error[0]<-50 and actual_error[2]>50:
+            self.state = "strong right"
+        elif actual_error[0]>50 and actual_error[2]<-50:
+            self.state = "strong left"
+        elif actual_error[2]<-50:
             self.state = "right"
+        elif actual_error[2]>50:
+            self.state = "left"
         else:
             self.state = "straight"
         return self.state,inc_error
 
 
 
-
+    def getStatusImage(self,calc_error_actual,state,vel,w):
+        out = np.zeros([480, 640, 3], dtype=np.uint8)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(out,"State: %s"%(state),(10,200),font,1,(255,255,255))
+        cv2.putText(out,"v: %f   w: %f"%(vel,w),(10,250),font,1,(255,0,255))
+        cv2.putText(out,"Error: %2.f"%(calc_error_actual),(10,300),font,1,(255,255,0))
+        return out
 
     def stateOfMachine(self,state,actual_error,inc_error):
+        calc_error_actual = mt.sqrt(actual_error[0]**2+
+                                    actual_error[1]**2+
+                                    actual_error[2]**2)
         if state == "straight":
-            vel = 0.2
+            vel = 2
             w = 0
         elif state == "right":
-            vel = 0.2
-            K = 0.01
-            w = K * inc_error[1]
+            vel = 0.5
+            K = -0.0005
+            w = K * calc_error_actual
         else:
-            K = 0.01
-            w = - K * inc_error[1]
-            vel = 0.2
+            K = 0.0005
+            w =  K * calc_error_actual
+            vel = 0.5
 
-
+        # print "%s: vel %.2f w %.2f Calcerr %.2f || ErNw %.2f %.2f %.2f"%(state,vel,w,calc_error_actual
+        #                                                                              ,actual_error[0],actual_error[1],
+        #                                                                              actual_error[2])
         self.motors.sendV(vel)
         self.motors.sendW(w)
+        return calc_error_actual,  vel, w
+
 
 
 
@@ -202,14 +219,12 @@ class MyAlgorithm(threading.Thread):
 
         mask = MyAlgorithm.createmask(self,imageRightdata)
         maskcolor = cv2.cvtColor(src=mask, code=cv2.COLOR_GRAY2RGB)
-        self.setLeftImageFiltered(maskcolor)
 
         # print time.clock() - start
         # cv2.imshow("jajaja", maskcolor)
         # cv2.waitKey(1)
 
-        #
-        #
+
         _,contours, hier = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
         mycnt = MyAlgorithm.getMaxcontour(self,contours)
         if mycnt != np.array([]):
@@ -217,19 +232,26 @@ class MyAlgorithm(threading.Thread):
             Npoint = MyAlgorithm.getNpoint(self,mycontour=mycnt,N=3)
             if Npoint != np.array([]):
                 procces = MyAlgorithm.drawNpoint(self,procces, Npoint, (255,0,0))
-        #     procces = MyAlgorithm.drawNpoint(self,procces, self.ref3point, (0,0,255))
-        #     procces = MyAlgorithm.drawError(self,procces,reference=self.ref3point,points=Npoint)
-        #     self.actual_error = MyAlgorithm.getError(self,self.ref3point,Npoint)
-        #     if self.previous_error != np.array([]):
-        #         state,inc_error = MyAlgorithm.getState(self,self.previous_error,self.actual_error)
-        #         MyAlgorithm.stateOfMachine(self, state, self.actual_error, inc_error)
-        #         print inc_error,state
-        #
-        #     self.previous_error = self.actual_error
+
+
+                self.actual_error = MyAlgorithm.getError(self,self.ref3point,Npoint)
+                procces = MyAlgorithm.drawNpoint(self,procces, self.ref3point, (0,0,255))
+                procces = MyAlgorithm.drawError(self,procces,reference=self.ref3point,points=Npoint)
+
+
+
+                if self.previous_error != np.array([]):
+                    self.previous_error = self.actual_error
+
+                state,inc_error = MyAlgorithm.getState(self,self.previous_error,self.actual_error)
+                calc_error_actual, vel, w = MyAlgorithm.stateOfMachine(self, state, self.actual_error, inc_error)
+                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual, state, vel, w)            #
+                self.previous_error = self.actual_error
 
 
 
         ###### Convertimos la mascara a rgb para visualizarla
 
         #SHOW THE FILTERED IMAGE ON THE GUI
-        self.setRightImageFiltered(procces)
+        self.setLeftImageFiltered(procces)
+        self.setRightImageFiltered(status_view)

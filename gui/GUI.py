@@ -82,10 +82,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def setXYValues(self,newX,newY):
         # print ("newX: %f, newY: %f" % (newX, newY) )
-        write=True
+        write=False
 
         myW=-newX*self.motors.getMaxW()
         myV=-newY*self.motors.getMaxV()
+        # print "myV: ",myV,"myW: ",myW
         if write:
             pose = self.pose_client.getPose3d()
             self.buffer.append("{:f} {:f} {:f} {:f}\n".format(pose.x/1000,pose.y/1000,myV,myW))
