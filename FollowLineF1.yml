@@ -25,6 +25,12 @@ FollowLineF1:
     Proxy: "Encoders:tcp -h localhost -p 8998"
     Topic: "/FollowLineF1/Encoders"
     Name: FollowLineF1Encoders
+
+  Pose:
+    Server: 1 # 0 -> Deactivate, 1 -> Ice , 2 -> ROS
+    Proxy: "Pose3D:tcp -h localhost -p 8998"
+    Topic: "/FollowLineF1/Encoders"
+    Name: FollowLineF1Pose
     
   robot: F1
 NodeName: FollowLineF1

@@ -25,6 +25,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.logoLayout.addWidget(self.logo)
         self.logo.setVisible(True)
 
+        self.buffer = []
+
 
 
         self.pushButton.clicked.connect(self.playClicked)
@@ -37,10 +39,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def updateGUI(self):
         #print 'update gui'
         self.camera1.updateImage()
+        self.pose = self.pose_client.getPose3d()
         #self.sensorsWidget.sensorsUpdate.emit()
+
 
     def getCameraL(self):
         return self.cameraL
+
+    def setPose(self,pose_client):
+        self.pose_client = pose_client
 
     def setCameraL(self,camera):
         self.cameraL=camera
@@ -74,9 +81,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return self.algorithm
 
     def setXYValues(self,newX,newY):
-        #print ("newX: %f, newY: %f" % (newX, newY) )
+        # print ("newX: %f, newY: %f" % (newX, newY) )
+        write=True
+
         myW=-newX*self.motors.getMaxW()
         myV=-newY*self.motors.getMaxV()
+        if write:
+            pose = self.pose_client.getPose3d()
+            self.buffer.append("{:f} {:f} {:f} {:f}\n".format(pose.x/1000,pose.y/1000,myV,myW))
+            if len(self.buffer)==10:
+                with open("/home/f/PycharmProjects/Robotica/follow_line/laps/prueba.txt",'a') as file:
+                    file.write("".join(self.buffer))
+                self.buffer=[]
+
+
         self.motors.sendV(myV)
         self.motors.sendW(myW)
 
