@@ -24,8 +24,11 @@ class MyAlgorithm(threading.Thread):
         self.imageRight=None
         self.imageLeft=None
 
-        self.ref3point = np.array(([317-1, 250], [287-52, 364], [262-109, 479]), dtype=np.int)
-        self.previous_error = np.array([0,0,0],dtype = np.int)
+        self.ref3point = np.array(([316, 244], [235, 361], [153, 478]), dtype=np.int)
+        self.m = float(self.ref3point[2,1]-self.ref3point[0,1])/float((self.ref3point[2,0]-self.ref3point[0,0]))
+        self.n = self.ref3point[0,1]-self.m*self.ref3point[0,0]
+
+        self.calc_previous_error  = None
         self.state="straight"
 
         self.stop_event = threading.Event()
@@ -86,17 +89,14 @@ class MyAlgorithm(threading.Thread):
 
         ###### Mask ######
         blur = cv2.GaussianBlur(image, (5, 5), 1)
-        hsv = cv2.cvtColor(src=blur, code=cv2.COLOR_RGB2HSV)
-        min_values = [0,100,50]
-        max_values = [0,255,255]
+        hsv = cv2.cvtColor(src=blur, code=cv2.COLOR_BGR2HSV)
+        min_values = [120,200,10]
+        max_values = [170,255,180]
+
 
 
         # hsv = image
         lower_red_hue_range = cv2.inRange(src=hsv, lowerb=np.array(min_values), upperb=np.array(max_values))
-        mask = cv2.erode(lower_red_hue_range,(7,7),iterations=5)
-        #clower_red_hue_range = cv2.inRange(src=hsv, lowerb=np.array([120, 200, 10]), upperb=np.array([170, 255, 179]))
-        # upper_red_hue_range = cv2.inRange(src=hsv, lowerb=np.array([160, 100, 100]), upperb=np.array([179, 255, 255]))
-        # return cv2.addWeighted(src1=lower_red_hue_range, alpha=1, src2=upper_red_hue_range, beta=1, gamma=0)
         return lower_red_hue_range
         # return upper_red_hue_range
     def getMycontour(self, contours):
@@ -149,11 +149,13 @@ class MyAlgorithm(threading.Thread):
             cv2.line(image,tuple(reference[i]),tuple(points[i]),(0,255,0))
         return image
 
-    def getError(self,reference,points):
-        return (reference-points)[:,0]
+    def getError(self,points,alfa=0.6,beta=0.0,gamma=0.4):
+        reference = np.concatenate((np.asarray(map(lambda x: (x[1]-self.n)/self.m,points.tolist()),dtype=np.int).reshape(-1,1),points[:,1].reshape(-1,1)),axis=1)
+        error = (reference-points)[:,0]
+        return error,MyAlgorithm.calcError(self,error,alfa,beta,gamma),reference
 
-    def getState(self,previous_error,actual_error):
-        inc_error = actual_error-previous_error
+    def getState(self,actual_error):
+
         if actual_error[0]<-50 and actual_error[2]>50:
             self.state = "strong right"
         elif actual_error[0]>50 and actual_error[2]<-50:
@@ -162,42 +164,91 @@ class MyAlgorithm(threading.Thread):
             self.state = "right"
         elif actual_error[2]>50:
             self.state = "left"
+
+        elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR"):
+            self.state = "close curveR"
+
+        elif (actual_error[0] > 10 ) and (self.state == "straight" or self.state == "close curveL"):
+            self.state = "close curveL"
         else:
             self.state = "straight"
-        return self.state,inc_error
+        return self.state
+
+    def calcError(self,error,alfa,beta,gamma):
+        return alfa*abs(error[0])+beta*abs(error[1])+gamma*abs(error[2])
 
 
-
-    def getStatusImage(self,calc_error_actual,state,vel,w):
+    def getStatusImage(self,calc_error_actual,actual_error,calc_error_inc,state,vel,w):
         out = np.zeros([480, 640, 3], dtype=np.uint8)
         font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(out,"State: %s"%(state),(10,200),font,1,(255,255,255))
-        cv2.putText(out,"v: %f   w: %f"%(vel,w),(10,250),font,1,(255,0,255))
-        cv2.putText(out,"Error: %2.f"%(calc_error_actual),(10,300),font,1,(255,255,0))
+        cv2.putText(out,"State: %s"%(state),(10,150),font,1,(255,255,255))
+        cv2.putText(out,"v: %f   w: %f"%(vel,w),(10,200),font,1,(255,0,255))
+        cv2.putText(out,"CalcErr: %2.f"%(calc_error_actual),(10,250),font,1,(255,255,0))
+        cv2.putText(out,"Err: %2.f"%(actual_error[0]),(10,300),font,1,(255,255,0))
+        cv2.putText(out,"inc: %2.f"%(calc_error_inc),(10,350),font,1,(255,255,0))
         return out
 
-    def stateOfMachine(self,state,actual_error,inc_error):
-        calc_error_actual = mt.sqrt(actual_error[0]**2+
-                                    actual_error[1]**2+
-                                    actual_error[2]**2)
-        if state == "straight":
-            vel = 2
-            w = 0
-        elif state == "right":
-            vel = 0.5
-            K = -0.0005
-            w = K * calc_error_actual
-        else:
-            K = 0.0005
-            w =  K * calc_error_actual
-            vel = 0.5
+    def stateOfMachine(self,state,actual_error,calc_error_actual,calc_previous_error):
+        calc_error_inc = abs(calc_error_actual - calc_previous_error)
 
-        # print "%s: vel %.2f w %.2f Calcerr %.2f || ErNw %.2f %.2f %.2f"%(state,vel,w,calc_error_actual
-        #                                                                              ,actual_error[0],actual_error[1],
-        #                                                                              actual_error[2])
+        velMax = 7
+
+
+
+        # # Disacelerate
+        if state == "close curveR":
+
+            vel = ( 1-float(abs(actual_error[0]))/100)*2+5
+            w = 0
+        elif state == "straight":
+            vel = velMax
+            w = 0
+
+        elif state== "right" or state == "strong right":
+            Kvp = 0.005
+            Kvd = 0.003
+            Kwp = -0.0045
+            Kwd = -0.002
+            vel =  5 - Kvp* calc_error_actual - Kvd* calc_error_inc
+            w = Kwp* calc_error_actual + Kwd* calc_error_inc
+        elif state== "left"or state == "strong left" or state =="close curveL":
+
+            Kvp = 0.005
+            Kvd = 0.003
+            Kwp = 0.0045
+            Kwd = 0.002
+            vel =  5 - Kvp* calc_error_actual - Kvd* calc_error_inc
+
+            w = Kwp* calc_error_actual + Kwd* calc_error_inc
+        else:
+            vel = 0
+            w = 0
+
+
+        #
+        # elif state == "right":
+
+        # elif state == "left":
+        #     Kvp =
+        #     Kvd =
+        #     Kwp =
+        #     Kwd =
+        # else state == "strong left":
+        #     Kvp =
+        #     Kvd =
+        #     Kwp =
+        #     Kwd =
+        # else:
+        #     Kvp =
+        #     Kvd =
+        #     Kwp =
+        #     Kwd =
+        #
+
+
         self.motors.sendV(vel)
         self.motors.sendW(w)
-        return calc_error_actual,  vel, w
+        return calc_error_actual,  vel, w,calc_error_inc
 
 
 
@@ -220,9 +271,6 @@ class MyAlgorithm(threading.Thread):
         mask = MyAlgorithm.createmask(self,imageRightdata)
         maskcolor = cv2.cvtColor(src=mask, code=cv2.COLOR_GRAY2RGB)
 
-        # print time.clock() - start
-        # cv2.imshow("jajaja", maskcolor)
-        # cv2.waitKey(1)
 
 
         _,contours, hier = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
@@ -234,23 +282,24 @@ class MyAlgorithm(threading.Thread):
                 procces = MyAlgorithm.drawNpoint(self,procces, Npoint, (255,0,0))
 
 
-                self.actual_error = MyAlgorithm.getError(self,self.ref3point,Npoint)
-                procces = MyAlgorithm.drawNpoint(self,procces, self.ref3point, (0,0,255))
-                procces = MyAlgorithm.drawError(self,procces,reference=self.ref3point,points=Npoint)
+                self.actual_error, self.calc_actual_error,self.reference = MyAlgorithm.getError(self,Npoint)
+                procces = MyAlgorithm.drawNpoint(self,procces, self.reference, (0,0,255))
+                procces = MyAlgorithm.drawError(self,procces,reference=self.reference,points=Npoint)
+
+
+                #First iteration
+                if not self.calc_previous_error:
+                    self.calc_previous_error  = self.calc_actual_error
+
+                state = MyAlgorithm.getState(self,self.actual_error)
+                calc_error_actual, vel, w,calc_error_inc = MyAlgorithm.stateOfMachine(self, state, self.actual_error,self.calc_actual_error, self.calc_previous_error)
+
+                # Drawing info
+                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual,self.actual_error,calc_error_inc, state, vel, w)            #
+                self.calc_previous_error = calc_error_actual
 
 
 
-                if self.previous_error != np.array([]):
-                    self.previous_error = self.actual_error
-
-                state,inc_error = MyAlgorithm.getState(self,self.previous_error,self.actual_error)
-                calc_error_actual, vel, w = MyAlgorithm.stateOfMachine(self, state, self.actual_error, inc_error)
-                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual, state, vel, w)            #
-                self.previous_error = self.actual_error
-
-
-
-        ###### Convertimos la mascara a rgb para visualizarla
 
         #SHOW THE FILTERED IMAGE ON THE GUI
         self.setLeftImageFiltered(procces)

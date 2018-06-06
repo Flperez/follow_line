@@ -33,7 +33,6 @@ from PyQt5.QtWidgets import QApplication
 
 
 
-
 if __name__ == "__main__":
 
     cfg = config.load(sys.argv[1])
