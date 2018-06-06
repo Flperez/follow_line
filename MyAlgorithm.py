@@ -160,9 +160,9 @@ class MyAlgorithm(threading.Thread):
             self.state = "strong right"
         elif actual_error[0]>50 and actual_error[2]<-50:
             self.state = "strong left"
-        elif actual_error[2]<-50:
+        elif actual_error[0]<-50:
             self.state = "right"
-        elif actual_error[2]>50:
+        elif actual_error[0]>50:
             self.state = "left"
 
         elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR"):
