@@ -23,6 +23,7 @@ class MyAlgorithm(threading.Thread):
         self.motors = motors
         self.imageRight=None
         self.imageLeft=None
+        self.buffer_state = []
 
         self.ref3point = np.array(([316, 244], [235, 361], [153, 478]), dtype=np.int)
         self.m = float(self.ref3point[2,1]-self.ref3point[0,1])/float((self.ref3point[2,0]-self.ref3point[0,0]))
@@ -160,10 +161,12 @@ class MyAlgorithm(threading.Thread):
             self.state = "strong right"
         elif actual_error[0]>50 and actual_error[2]<-50:
             self.state = "strong left"
-        elif actual_error[2]<-50:
+        elif actual_error[0]<-50:
             self.state = "right"
-        elif actual_error[2]>50:
+        elif actual_error[0]>50:
             self.state = "left"
+
+
 
         elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR"):
             self.state = "close curveR"
@@ -191,14 +194,14 @@ class MyAlgorithm(threading.Thread):
     def stateOfMachine(self,state,actual_error,calc_error_actual,calc_previous_error):
         calc_error_inc = abs(calc_error_actual - calc_previous_error)
 
-        velMax = 7
+        velMax = 15
 
 
 
         # # Disacelerate
-        if state == "close curveR":
+        if state == "close curveR" or state =="close curveL":
 
-            vel = ( 1-float(abs(actual_error[0]))/100)*2+5
+            vel = ( 1-float(abs(actual_error[0]))/100)*2+6.5
             w = 0
         elif state == "straight":
             vel = velMax
@@ -209,15 +212,15 @@ class MyAlgorithm(threading.Thread):
             Kvd = 0.003
             Kwp = -0.0045
             Kwd = -0.002
-            vel =  5 - Kvp* calc_error_actual - Kvd* calc_error_inc
+            vel =  7 - Kvp* calc_error_actual - Kvd* calc_error_inc
             w = Kwp* calc_error_actual + Kwd* calc_error_inc
-        elif state== "left"or state == "strong left" or state =="close curveL":
+        elif state== "left"or state == "strong left" :
 
             Kvp = 0.005
             Kvd = 0.003
             Kwp = 0.0045
             Kwd = 0.002
-            vel =  5 - Kvp* calc_error_actual - Kvd* calc_error_inc
+            vel =  7 - Kvp* calc_error_actual - Kvd* calc_error_inc
 
             w = Kwp* calc_error_actual + Kwd* calc_error_inc
         else:
