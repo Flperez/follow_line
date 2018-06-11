@@ -14,8 +14,6 @@ time_cycle = 80
 class MyAlgorithm(threading.Thread):
 
 
-
-
     def __init__(self, cameraL, cameraR, motors, pose_client):
         self.cameraL = cameraL
         self.cameraR = cameraR
@@ -23,7 +21,11 @@ class MyAlgorithm(threading.Thread):
         self.motors = motors
         self.imageRight=None
         self.imageLeft=None
-        self.buffer_state = []
+        self.list_states = ["close curveR", "close curveL", "straight", "right", "left"]
+        self.state_choosen = "straight"
+
+
+        self.buffer_state = [0,0,0,0,0,0,0]
 
         self.ref3point = np.array(([316, 244], [235, 361], [153, 478]), dtype=np.int)
         self.m = float(self.ref3point[2,1]-self.ref3point[0,1])/float((self.ref3point[2,0]-self.ref3point[0,0]))
@@ -124,11 +126,9 @@ class MyAlgorithm(threading.Thread):
 
     def getNpoint(self,mycontour,N):
         height = 480
-        ejeY = np.linspace(np.min(np.min(mycontour[:,0,1])),np.max(mycontour[:,0,1])-1,N).astype(int)
-        # print mycontour.shape
-        # for line in ejeY:
-        #     # print ejeY
-        #     print np.where(mycontour[:,0,1]==line)
+        ejeY = np.array([np.min(mycontour[:,0,1]),np.min(mycontour[:,0,1])+50,np.min(mycontour[:,0,1])+70])
+
+        
         try:
             listmax = [np.max(np.where(mycontour[:,0,1]==line)) for line in ejeY]
             listmin = [np.min(np.where(mycontour[:,0,1]==line)) for line in ejeY]
@@ -158,9 +158,9 @@ class MyAlgorithm(threading.Thread):
     def getState(self,actual_error):
 
         if actual_error[0]<-50 and actual_error[2]>50:
-            self.state = "strong right"
+            self.state = "right"
         elif actual_error[0]>50 and actual_error[2]<-50:
-            self.state = "strong left"
+            self.state = "left"
         elif actual_error[0]<-50:
             self.state = "right"
         elif actual_error[0]>50:
@@ -168,13 +168,15 @@ class MyAlgorithm(threading.Thread):
 
 
 
-        elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR"):
+        elif (actual_error[0] < -15) and (self.state == "straight" or self.state == "close curveR"):
             self.state = "close curveR"
 
-        elif (actual_error[0] > 10 ) and (self.state == "straight" or self.state == "close curveL"):
+        elif (actual_error[0] > 15 ) and (self.state == "straight" or self.state == "close curveL"):
             self.state = "close curveL"
         else:
             self.state = "straight"
+
+       
         return self.state
 
     def calcError(self,error,alfa,beta,gamma):
@@ -187,22 +189,31 @@ class MyAlgorithm(threading.Thread):
         cv2.putText(out,"State: %s"%(state),(10,150),font,1,(255,255,255))
         cv2.putText(out,"v: %f   w: %f"%(vel,w),(10,200),font,1,(255,0,255))
         cv2.putText(out,"CalcErr: %2.f"%(calc_error_actual),(10,250),font,1,(255,255,0))
-        cv2.putText(out,"Err: %2.f"%(actual_error[0]),(10,300),font,1,(255,255,0))
+        cv2.putText(out,"Err: %2.f %2.f %2.f"%(actual_error[0],actual_error[1],actual_error[2]),(10,300),font,1,(255,255,0))
         cv2.putText(out,"inc: %2.f"%(calc_error_inc),(10,350),font,1,(255,255,0))
         return out
 
     def stateOfMachine(self,state,actual_error,calc_error_actual,calc_previous_error):
         calc_error_inc = abs(calc_error_actual - calc_previous_error)
+        # print calc_error_actual - calc_previous_error
 
-        velMax = 15
+        velMax = 18
 
 
 
         # # Disacelerate
-        if state == "close curveR" or state =="close curveL":
+        if state == "close curveR":
 
-            vel = ( 1-float(abs(actual_error[0]))/100)*2+6.5
-            w = 0
+            vel = ( 1-float(abs(actual_error[0]))/100)*2+7.5
+            Kwp = -0.0005
+            Kwd = -0.00025
+            w =  Kwp * calc_error_actual + Kwd * calc_error_inc
+        elif state  =="close curveL":
+            vel = (1 - float(abs(actual_error[0])) / 100) * 2 + 7.5
+            Kwp = 0.0005
+            Kwd = 0.00025
+            w = Kwp * calc_error_actual + Kwd * calc_error_inc
+
         elif state == "straight":
             vel = velMax
             w = 0
@@ -210,16 +221,16 @@ class MyAlgorithm(threading.Thread):
         elif state== "right" or state == "strong right":
             Kvp = 0.005
             Kvd = 0.003
-            Kwp = -0.0045
-            Kwd = -0.002
+            Kwp = -0.0065
+            Kwd = -0.004
             vel =  7 - Kvp* calc_error_actual - Kvd* calc_error_inc
             w = Kwp* calc_error_actual + Kwd* calc_error_inc
         elif state== "left"or state == "strong left" :
 
             Kvp = 0.005
             Kvd = 0.003
-            Kwp = 0.0045
-            Kwd = 0.002
+            Kwp = 0.0065
+            Kwd = 0.004
             vel =  7 - Kvp* calc_error_actual - Kvd* calc_error_inc
 
             w = Kwp* calc_error_actual + Kwd* calc_error_inc
@@ -228,25 +239,6 @@ class MyAlgorithm(threading.Thread):
             w = 0
 
 
-        #
-        # elif state == "right":
-
-        # elif state == "left":
-        #     Kvp =
-        #     Kvd =
-        #     Kwp =
-        #     Kwd =
-        # else state == "strong left":
-        #     Kvp =
-        #     Kvd =
-        #     Kwp =
-        #     Kwd =
-        # else:
-        #     Kvp =
-        #     Kvd =
-        #     Kwp =
-        #     Kwd =
-        #
 
 
         self.motors.sendV(vel)
@@ -295,15 +287,20 @@ class MyAlgorithm(threading.Thread):
                     self.calc_previous_error  = self.calc_actual_error
 
                 state = MyAlgorithm.getState(self,self.actual_error)
-                calc_error_actual, vel, w,calc_error_inc = MyAlgorithm.stateOfMachine(self, state, self.actual_error,self.calc_actual_error, self.calc_previous_error)
+
+
+                
+
+                calc_error_actual, vel, w,calc_error_inc = MyAlgorithm.stateOfMachine(self,  state, self.actual_error,self.calc_actual_error, self.calc_previous_error)
 
                 # Drawing info
-                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual,self.actual_error,calc_error_inc, state, vel, w)            #
+                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual,self.actual_error,calc_error_inc,  state, vel, w)            #
                 self.calc_previous_error = calc_error_actual
+                self.setRightImageFiltered(status_view)
 
 
 
 
         #SHOW THE FILTERED IMAGE ON THE GUI
         self.setLeftImageFiltered(procces)
-        self.setRightImageFiltered(status_view)
+
