@@ -199,7 +199,7 @@ class MyAlgorithm(threading.Thread):
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
         elif state == "straight":
-            vel = velMax+0.075*self.contVel
+            vel = velMax+0.1*self.contVel
             w = 0
 
         elif state == "right" or state == "strong right":
