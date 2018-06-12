@@ -20,6 +20,8 @@ class MyAlgorithm(threading.Thread):
         self.motors = motors
         self.imageRight = None
         self.imageLeft = None
+        self.contVel = 0
+        self.flag_time = True
 
         self.ref3point = np.array(([316, 244], [235, 361], [153, 478]), dtype=np.int)
         self.m = float(self.ref3point[2, 1] - self.ref3point[0, 1]) / float(
@@ -94,35 +96,16 @@ class MyAlgorithm(threading.Thread):
         return lower_red_hue_range
         # return upper_red_hue_range
 
-    def getMycontour(self, contours):
-        limits = [np.max(contours[i][:][:, 0, 1]) for i in range(len(contours))]
-        shapes = [contours[i].shape[0] for i in range(len(contours))]
-        limits_shapes = zip(limits, shapes)
-        limits_shapes_sort = sorted(limits_shapes, key=operator.itemgetter(1), reverse=True)
-        # Entre los dos con mas puntos, elige el que tenga un punto en y mayor
-        maximo = max(zip(*limits_shapes_sort[:2])[0])
 
-        return limits.index(maximo)
-
-    def getMaxcontour(self, contours):
-        lst = []
-        if contours:
-            for idx, cnt in enumerate(contours):
-                cnt = np.reshape(cnt, (-1, 2))
-                lst.append((np.max(cnt[:, 1]), cnt.shape[0], idx))
-            lst_zip = np.asarray(sorted(lst, key=operator.itemgetter(1), reverse=True)[:3])
-            return contours[lst_zip[np.argmax(lst_zip[:, 0]), 2]]
-        else:
-            return np.array([])
 
     def getNpoint(self, mycontour, N):
-        height = 480
-        ejeY = np.array([np.min(mycontour[:, 0, 1]), np.min(mycontour[:, 0, 1]) + 50, np.min(mycontour[:, 0, 1]) + 70])
 
+        min_p = np.min(mycontour[:, 0])
+        ejeY = np.array([min_p, min_p+ 50, min_p+ 70])
         try:
-            listmax = [np.max(np.where(mycontour[:, 0, 1] == line)) for line in ejeY]
-            listmin = [np.min(np.where(mycontour[:, 0, 1] == line)) for line in ejeY]
-            ejeX = 0.5 * (mycontour[listmax, 0, 0] + mycontour[listmin, 0, 0])
+            listmax = [0.5 *np.max(mycontour[np.where(mycontour[:, 0] == line),1]) for line in ejeY]
+            listmin = [0.5 *np.min(mycontour[np.where(mycontour[:, 0] == line),1]) for line in ejeY]
+            ejeX =  (np.array(listmax,dtype=int)+np.array(listmin,dtype=int))
             return np.concatenate((np.vstack(ejeX), np.vstack(ejeY)), 1).astype(int)
 
         except ValueError:
@@ -146,28 +129,39 @@ class MyAlgorithm(threading.Thread):
 
     def getState(self, actual_error):
 
-        if actual_error[0] < -50 and actual_error[2] > 50:
+        if actual_error[0] < -50 and actual_error[2] > 50 and self.state != "straight":
             self.state = "right"
-        elif actual_error[0] > 50 and actual_error[2] < -50:
+            self.contVel = 0
+        elif actual_error[0] > 50 and actual_error[2] < -50  and self.state != "straight":
             self.state = "left"
+            self.contVel = 0
         elif actual_error[0] < -50:
             self.state = "right"
+            self.contVel = 0
         elif actual_error[0] > 50:
             self.state = "left"
+            self.contVel = 0
 
         elif (self.state != "right" and self.state != "left") and -30<actual_error[0] < 0 and abs(actual_error[2])-abs(actual_error[0]) > 80:
             self.state = "out curveR"
+            self.contVel += 1
 
         elif ( self.state != "right" and self.state != "left") and -0<actual_error[0] < 30 and abs(actual_error[2])-abs(actual_error[0]) > 80:
             self.state = "out curveL"
+            self.contVel +=1
 
         elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR" or self.state == "out curveL" or self.state == "out curveR") and abs(actual_error[2])-abs(actual_error[0]) < 100:
             self.state = "close curveR"
 
+
         elif (actual_error[0] > 10) and (self.state == "straight" or self.state == "close curveL" or self.state == "out curveL" or self.state == "out curveR") and abs(actual_error[2])-abs(actual_error[0]) < 100:
             self.state = "close curveL"
-        else:
+        elif (-10<actual_error[0]<10):
             self.state = "straight"
+            self.contVel +=1
+
+        if self.contVel > 40:
+            self.contVel = 40
 
         return self.state
 
@@ -188,53 +182,56 @@ class MyAlgorithm(threading.Thread):
     def stateOfMachine(self, state, actual_error, calc_error_actual, calc_previous_error):
         calc_error_inc = abs(calc_error_actual - calc_previous_error)
         # print calc_error_actual - calc_previous_error
-
+        # print self.contVel
         velMax = 10.5
 
         # # Disacelerate
         if state == "close curveR":
 
             vel = (1 - float(abs(actual_error[0])) / 100) * 2 + 7.5
-            Kwp = -0.0005
-            Kwd = -0.00025
+            Kwp = -0.00525
+            Kwd = -0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "close curveL":
             vel = (1 - float(abs(actual_error[0])) / 100) * 2 + 7.5
-            Kwp = 0.0005
-            Kwd = 0.00025
+            Kwp = 0.000525
+            Kwd = 0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
         elif state == "straight":
-            vel = velMax
+            vel = velMax+0.075*self.contVel
             w = 0
 
         elif state == "right" or state == "strong right":
             Kvp = 0.005
-            Kvd = 0.003
+            Kvd = 0.004
             Kwp = -0.0055
             Kwd = -0.004
-            vel = 6.65 - Kvp * calc_error_actual - Kvd * calc_error_inc
+            vel = 6.5 - Kvp * calc_error_actual - Kvd * calc_error_inc
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "left" or state == "strong left":
 
-            Kvp = 0.005
-            Kvd = 0.003
-            Kwp = 0.0055
+            Kvp = 0.0054
+            Kvd = 0.004
+            Kwp = 0.0059
             Kwd = 0.0045
-            vel = 6.65 - Kvp * calc_error_actual - Kvd * calc_error_inc
+            vel = 6.5 - Kvp * calc_error_actual - Kvd * calc_error_inc
 
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "out curveR":
-            vel = 10
-            Kwp = -0.0004
+            vel = velMax+0.075*self.contVel
+            Kwp = -0.00045
             Kwd = -0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
         elif state == "out curveL":
-            vel = 10
+            vel = velMax+0.075*self.contVel
             Kwp = 0.0004
             Kwd = 0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
+        elif state == "not line":
+            w = -0.3
+            vel = 0
 
         self.motors.sendV(vel)
         self.motors.sendW(w)
@@ -244,29 +241,36 @@ class MyAlgorithm(threading.Thread):
         # GETTING THE IMAGES
         # imageLeft = self.cameraL.getImage()
         imageRight = self.cameraR.getImage()
-        self.pose = self.pose_client.getPose3d()
+        #self.pose = self.pose_client.getPose3d()
 
-        # Add your code here
-        start = time.clock()
-
-        ###### Limitamos la imagen de entrada
+        # Limitamos la imagen de entrada
         imageRight = imageRight.data
         imageRightdata = np.zeros([480, 640, 3], dtype=np.uint8)
         procces = np.zeros([480, 640, 3], dtype=np.uint8)
         imageRightdata[480 / 2:, :] = imageRight[480 / 2:, :]
 
+        # Mascara para la linea
         mask = MyAlgorithm.createmask(self, imageRightdata)
-        maskcolor = cv2.cvtColor(src=mask, code=cv2.COLOR_GRAY2RGB)
 
-        _, contours, hier = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-        mycnt = MyAlgorithm.getMaxcontour(self, contours)
-        if mycnt != np.array([]):
-            cv2.drawContours(procces, mycnt, -1, [255, 0, 0])
-            Npoint = MyAlgorithm.getNpoint(self, mycontour=mycnt, N=3)
+        # Extraemos el contorno de la linea
+        line = np.asarray(np.where(mask==255)).astype(np.int).T
+        procces[line[:,0],line[:,1],:]=(255,0,255)
+        if line.size != 0:
+
+            # Drawing line
+            procces[line[:, 0], line[:, 1], :] = (255, 255, 255)
+
+            # Get the 3 points which we use to calculate the error
+            Npoint = MyAlgorithm.getNpoint(self, mycontour=line, N=3)
             if Npoint != np.array([]):
+
+                # Drawing the 3 points
                 procces = MyAlgorithm.drawNpoint(self, procces, Npoint, (255, 0, 0))
 
+                # Get the 3 projected points to the line reference and the error with 3 points line
                 self.actual_error, self.calc_actual_error, self.reference = MyAlgorithm.getError(self, Npoint)
+
+                # Drawing the reference points and the error
                 procces = MyAlgorithm.drawNpoint(self, procces, self.reference, (0, 0, 255))
                 procces = MyAlgorithm.drawError(self, procces, reference=self.reference, points=Npoint)
 
@@ -274,17 +278,25 @@ class MyAlgorithm(threading.Thread):
                 if not self.calc_previous_error:
                     self.calc_previous_error = self.calc_actual_error
 
+                # Get the state with actual error
                 state = MyAlgorithm.getState(self, self.actual_error)
-
                 calc_error_actual, vel, w, calc_error_inc = MyAlgorithm.stateOfMachine(self, state, self.actual_error,
                                                                                        self.calc_actual_error,
                                                                                        self.calc_previous_error)
 
                 # Drawing info
-                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual, self.actual_error, calc_error_inc,
-                                                         state, vel, w)  #
+                status_view = MyAlgorithm.getStatusImage(self, calc_error_actual, self.actual_error, calc_error_inc, state, vel, w)  #
                 self.calc_previous_error = calc_error_actual
                 self.setRightImageFiltered(status_view)
+        else:
+            # Add your code here
+            if self.flag_time:
+                self.time_not_line = time.clock()
+                self.flag_time = False
+            else:
+                # print  time.clock() -self.time_not_line
+                if  time.clock() - self.time_not_line>0.5:
+                    self.state = "not line"
 
         # SHOW THE FILTERED IMAGE ON THE GUI
         self.setLeftImageFiltered(procces)
