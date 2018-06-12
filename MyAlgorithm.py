@@ -324,3 +324,32 @@ class MyAlgorithm(threading.Thread):
 
         # SHOW THE FILTERED IMAGE ON THE GUI
         self.setLeftImageFiltered(procces)
+'''
+    def getStatusImage(self, calc_error_actual, actual_error, calc_error_inc, state, vel, w):
+        out = np.zeros([480, 640, 3], dtype=np.uint8)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        cv2.putText(out, "%s" % (state), (10, 150), font, 2, (255, 255, 255),2)
+        cv2.putText(out, "v: %f" % (vel), (10, 225), font, 2, (0, 255, 255),2)
+        cv2.putText(out, "w: %f" % ( w), (10, 285), font, 2, (0, 255, 255),2)
+        # cv2.putText(out, "CalcErr: %2.f" % (calc_error_actual), (10, 250), font, 1, (255, 255, 0))
+        cv2.putText(out,"%02d:%02d"%(divmod(int(time.clock()-self.time_go),60)),(10, 360), font, 2, (0, 255, 0),2)
+        cv2.putText(out,"LAP: %02d"%(self.lap),(300, 360), font, 2, (0, 0, 255),2)
+        # Close to line lap
+        if  self.initial_pose.x/1000 - 0.5 < self.pose.x/1000 < self.initial_pose.x/1000 + 0.5 \
+                and self.initial_pose.y/1000  < self.pose.y/1000 < self.initial_pose.y/1000+2:
+            # Not increase various time
+            if self.flap_lap:
+                self.lap+=1
+                self.flap_lap = False
+        else:
+
+            self.flap_lap = True
+        # print self.lap
+
+
+        # if self.pose.
+        #cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
+        #            1, (255, 255, 0))
+        #cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
+        return out
+'''
