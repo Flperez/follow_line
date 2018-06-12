@@ -22,6 +22,7 @@ class MyAlgorithm(threading.Thread):
         self.imageLeft = None
         self.contVel = 0
         self.flag_time = True
+        self.flag_go = True
 
         self.ref3point = np.array(([316, 244], [235, 361], [153, 478]), dtype=np.int)
         self.m = float(self.ref3point[2, 1] - self.ref3point[0, 1]) / float(
@@ -160,8 +161,8 @@ class MyAlgorithm(threading.Thread):
             self.state = "straight"
             self.contVel +=1
 
-        if self.contVel > 40:
-            self.contVel = 40
+        if self.contVel > 45:
+            self.contVel = 45
 
         return self.state
 
@@ -174,9 +175,10 @@ class MyAlgorithm(threading.Thread):
         cv2.putText(out, "State: %s" % (state), (10, 150), font, 1, (255, 255, 255))
         cv2.putText(out, "v: %f   w: %f" % (vel, w), (10, 200), font, 1, (255, 0, 255))
         cv2.putText(out, "CalcErr: %2.f" % (calc_error_actual), (10, 250), font, 1, (255, 255, 0))
-        cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
-                    1, (255, 255, 0))
-        cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
+        cv2.putText(out,"TIME: %02d:%02d"%(divmod(int(time.clock()-self.time_go),60)),(100, 350), font, 2, (0, 255, 0),2)
+        #cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
+        #            1, (255, 255, 0))
+        #cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
         return out
 
     def stateOfMachine(self, state, actual_error, calc_error_actual, calc_previous_error):
@@ -219,14 +221,14 @@ class MyAlgorithm(threading.Thread):
 
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "out curveR":
-            vel = velMax+0.075*self.contVel
+            vel = velMax+0.08*self.contVel
             Kwp = -0.00045
             Kwd = -0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
         elif state == "out curveL":
-            vel = velMax+0.075*self.contVel
-            Kwp = 0.0004
+            vel = velMax+0.08*self.contVel
+            Kwp = 0.00045
             Kwd = 0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "not line":
@@ -239,9 +241,13 @@ class MyAlgorithm(threading.Thread):
 
     def execute(self):
         # GETTING THE IMAGES
-        # imageLeft = self.cameraL.getImage()
+        if self.flag_go:
+            self.time_go = time.clock()
+            self.flag_go = False
+
+
         imageRight = self.cameraR.getImage()
-        #self.pose = self.pose_client.getPose3d()
+        self.pose = self.pose_client.getPose3d()
 
         # Limitamos la imagen de entrada
         imageRight = imageRight.data
