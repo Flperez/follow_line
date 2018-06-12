@@ -24,6 +24,9 @@ class MyAlgorithm(threading.Thread):
         self.flag_time = True
         self.flag_go = True
 
+        self.lap = 0
+        self.flap_lap = True
+
         self.ref3point = np.array(([316, 244], [235, 361], [153, 478]), dtype=np.int)
         self.m = float(self.ref3point[2, 1] - self.ref3point[0, 1]) / float(
             (self.ref3point[2, 0] - self.ref3point[0, 0]))
@@ -176,6 +179,20 @@ class MyAlgorithm(threading.Thread):
         cv2.putText(out, "v: %f   w: %f" % (vel, w), (10, 200), font, 1, (255, 0, 255))
         cv2.putText(out, "CalcErr: %2.f" % (calc_error_actual), (10, 250), font, 1, (255, 255, 0))
         cv2.putText(out,"TIME: %02d:%02d"%(divmod(int(time.clock()-self.time_go),60)),(100, 350), font, 2, (0, 255, 0),2)
+        # Close to line lap
+        if  self.initial_pose.x/1000 - 0.5 < self.pose.x/1000 < self.initial_pose.x/1000 + 0.5 \
+                and self.initial_pose.y/1000  < self.pose.y/1000 < self.initial_pose.y/1000+2:
+            # Not increase various time
+            if self.flap_lap:
+                self.lap+=1
+                self.flap_lap = False
+        else:
+
+            self.flap_lap = True
+        print self.lap
+
+
+        # if self.pose.
         #cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
         #            1, (255, 255, 0))
         #cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
@@ -243,6 +260,7 @@ class MyAlgorithm(threading.Thread):
         # GETTING THE IMAGES
         if self.flag_go:
             self.time_go = time.clock()
+            self.initial_pose = self.pose_client.getPose3d()
             self.flag_go = False
 
 
