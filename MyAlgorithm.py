@@ -207,12 +207,12 @@ class MyAlgorithm(threading.Thread):
         # # Disacelerate
         if state == "close curveR":
 
-            vel = (1 - float(abs(actual_error[0])) / 100) * 2 + 7.5
+            vel = (1 - float(abs(actual_error[0])) / 100) * 1 + 6
             Kwp = -0.00525
             Kwd = -0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "close curveL":
-            vel = (1 - float(abs(actual_error[0])) / 100) * 2 + 7.5
+            vel = (1 - float(abs(actual_error[0])) / 100) * 1 + 6
             Kwp = 0.000525
             Kwd = 0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
