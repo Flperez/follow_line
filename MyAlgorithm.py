@@ -133,34 +133,43 @@ class MyAlgorithm(threading.Thread):
 
     def getState(self, actual_error):
 
-        if actual_error[0] < -50 and actual_error[2] > 50 and self.state != "straight":
+        if actual_error[0] < -50  and self.state != "straight":
             self.state = "right"
             self.contVel = 0
-        elif actual_error[0] > 50 and actual_error[2] < -50  and self.state != "straight":
+        elif actual_error[0] > 50  and self.state != "straight":
             self.state = "left"
             self.contVel = 0
-        elif actual_error[0] < -50:
-            self.state = "right"
-            self.contVel = 0
-        elif actual_error[0] > 50:
-            self.state = "left"
-            self.contVel = 0
-
-        elif (self.state != "right" and self.state != "left") and -30<actual_error[0] < 0 and abs(actual_error[2])-abs(actual_error[0]) > 80:
+        #elif actual_error[0] < -50:
+        #    self.state = "right"
+        #    self.contVel = 0
+        #elif actual_error[0] > 50:
+        #    self.state = "left"
+        #    self.contVel = 0
+        elif -40<actual_error[0]<0 and (self.state == "right" or self.state == "out curveR"):
             self.state = "out curveR"
-            self.contVel += 1
-
-        elif ( self.state != "right" and self.state != "left") and -0<actual_error[0] < 30 and abs(actual_error[2])-abs(actual_error[0]) > 80:
+            self.contVel +=1
+        elif 0<actual_error[0]<40 and (self.state == "left" or self.state == "out curveL"):
             self.state = "out curveL"
             self.contVel +=1
 
-        elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR" or self.state == "out curveL" or self.state == "out curveR") and abs(actual_error[2])-abs(actual_error[0]) < 100:
+        elif (self.state != "right" and self.state != "left") and -30<actual_error[0] < 0 and abs(actual_error[2])-abs(actual_error[0]) > 80:
+            self.state = "close straightR"
+            self.contVel += 1
+
+        elif ( self.state != "right" and self.state != "left") and -0<actual_error[0] < 30 and abs(actual_error[2])-abs(actual_error[0]) > 80:
+            self.state = "close straightL"
+            self.contVel +=1
+
+
+        elif (actual_error[0] < -10) and (self.state == "straight" or self.state == "close curveR" or self.state == "close straightL" or self.state == "close straightR") and abs(actual_error[2])-abs(actual_error[0]) < 100:
             self.state = "close curveR"
 
 
-        elif (actual_error[0] > 10) and (self.state == "straight" or self.state == "close curveL" or self.state == "out curveL" or self.state == "out curveR") and abs(actual_error[2])-abs(actual_error[0]) < 100:
+        elif (actual_error[0] > 10) and (self.state == "straight" or self.state == "close curveL" or self.state == "close straightL" or self.state == "close straightR") and abs(actual_error[2])-abs(actual_error[0]) < 100:
             self.state = "close curveL"
-        elif (-10<actual_error[0]<10):
+
+
+        elif (-10<actual_error[0]<10) and self.state != "right" and self.state != "left":
             self.state = "straight"
             self.contVel +=1
 
@@ -178,24 +187,24 @@ class MyAlgorithm(threading.Thread):
         cv2.putText(out, "State: %s" % (state), (10, 150), font, 1, (255, 255, 255))
         cv2.putText(out, "v: %f   w: %f" % (vel, w), (10, 200), font, 1, (255, 0, 255))
         cv2.putText(out, "CalcErr: %2.f" % (calc_error_actual), (10, 250), font, 1, (255, 255, 0))
-        cv2.putText(out,"TIME: %02d:%02d"%(divmod(int(time.clock()-self.time_go),60)),(100, 350), font, 2, (0, 255, 0),2)
-        # Close to line lap
-        if  self.initial_pose.x/1000 - 0.5 < self.pose.x/1000 < self.initial_pose.x/1000 + 0.5 \
-                and self.initial_pose.y/1000  < self.pose.y/1000 < self.initial_pose.y/1000+2:
-            # Not increase various time
-            if self.flap_lap:
-                self.lap+=1
-                self.flap_lap = False
-        else:
 
-            self.flap_lap = True
-        print self.lap
+        # Close to line lap
+        #if  self.initial_pose.x/1000 - 0.5 < self.pose.x/1000 < self.initial_pose.x/1000 + 0.5 \
+        #        and self.initial_pose.y/1000  < self.pose.y/1000 < self.initial_pose.y/1000+2:
+        #    # Not increase various time
+        #    if self.flap_lap:
+        #        self.lap+=1
+        #        self.flap_lap = False
+        #else:
+
+        #    self.flap_lap = True
+
 
 
         # if self.pose.
-        #cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
-        #            1, (255, 255, 0))
-        #cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
+        cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
+                    1, (255, 255, 0))
+        cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
         return out
 
     def stateOfMachine(self, state, actual_error, calc_error_actual, calc_previous_error):
@@ -207,18 +216,18 @@ class MyAlgorithm(threading.Thread):
         # # Disacelerate
         if state == "close curveR":
 
-            vel = (1 - float(abs(actual_error[0])) / 100) * 1 + 6
+            self.vel = (1 - float(abs(actual_error[0])) / 100) * 1 + 6
             Kwp = -0.00525
             Kwd = -0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "close curveL":
-            vel = (1 - float(abs(actual_error[0])) / 100) * 1 + 6
+            self.vel = (1 - float(abs(actual_error[0])) / 100) * 1 + 6
             Kwp = 0.000525
             Kwd = 0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
         elif state == "straight":
-            vel = velMax+0.1*self.contVel
+            self.vel = velMax+0.2*self.contVel
             w = 0
 
         elif state == "right" or state == "strong right":
@@ -226,7 +235,7 @@ class MyAlgorithm(threading.Thread):
             Kvd = 0.004
             Kwp = -0.0055
             Kwd = -0.004
-            vel = 6.5 - Kvp * calc_error_actual - Kvd * calc_error_inc
+            self.vel = 7 - Kvp * calc_error_actual - Kvd * calc_error_inc
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "left" or state == "strong left":
 
@@ -234,27 +243,41 @@ class MyAlgorithm(threading.Thread):
             Kvd = 0.004
             Kwp = 0.0059
             Kwd = 0.0045
-            vel = 6.5 - Kvp * calc_error_actual - Kvd * calc_error_inc
+            self.vel = 7 - Kvp * calc_error_actual - Kvd * calc_error_inc
 
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
-        elif state == "out curveR":
-            vel = velMax+0.08*self.contVel
+        elif state == "close straightR":
+            self.vel = velMax+0.2*self.contVel
             Kwp = -0.00045
             Kwd = -0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
-        elif state == "out curveL":
-            vel = velMax+0.08*self.contVel
+        elif state == "close straightL":
+            self.vel = velMax+0.2*self.contVel
             Kwp = 0.00045
             Kwd = 0.0003
             w = Kwp * calc_error_actual + Kwd * calc_error_inc
         elif state == "not line":
             w = -0.3
-            vel = 0
+            self.vel = 0
+        elif state == "out curveR":
+            self.vel = self.vel+0.1*self.contVel
+            Kwp = -0.0005
+            Kwd = -0.0003
+            if self.vel > 15:
+                self.vel = 15
+            w = Kwp * calc_error_actual + Kwd * calc_error_inc
+        elif state == "out curveL":
+            self.vel = self.vel+0.1*self.contVel
+            Kwp = 0.0005
+            Kwd = 0.0003
+            if self.vel > 15:
+                self.vel = 15
+            w = Kwp * calc_error_actual + Kwd * calc_error_inc
 
-        self.motors.sendV(vel)
+        self.motors.sendV(self.vel)
         self.motors.sendW(w)
-        return calc_error_actual, vel, w, calc_error_inc
+        return calc_error_actual, self.vel, w, calc_error_inc
 
     def execute(self):
         # GETTING THE IMAGES
