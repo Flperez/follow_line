@@ -16,7 +16,6 @@ class MyAlgorithm(threading.Thread):
     def __init__(self, cameraL, cameraR, motors, pose_client):
         self.cameraL = cameraL
         self.cameraR = cameraR
-        self.pose_client = pose_client
         self.motors = motors
         self.imageRight = None
         self.imageLeft = None
@@ -147,12 +146,6 @@ class MyAlgorithm(threading.Thread):
         elif actual_error[0] > 50  and self.state != "straight":
             self.state = "left"
             self.contVel = 0
-        #elif actual_error[0] < -50:
-        #    self.state = "right"
-        #    self.contVel = 0
-        #elif actual_error[0] > 50:
-        #    self.state = "left"
-        #    self.contVel = 0
         elif -40<actual_error[0]<0 and (self.state == "right" or self.state == "out curveR"):
             self.state = "out curveR"
             self.contVel +=1
@@ -194,21 +187,6 @@ class MyAlgorithm(threading.Thread):
         cv2.putText(out, "State: %s" % (state), (10, 150), font, 1, (255, 255, 255))
         cv2.putText(out, "v: %f   w: %f" % (vel, w), (10, 200), font, 1, (255, 0, 255))
         cv2.putText(out, "CalcErr: %2.f" % (calc_error_actual), (10, 250), font, 1, (255, 255, 0))
-
-        # Close to line lap
-        #if  self.initial_pose.x/1000 - 0.5 < self.pose.x/1000 < self.initial_pose.x/1000 + 0.5 \
-        #        and self.initial_pose.y/1000  < self.pose.y/1000 < self.initial_pose.y/1000+2:
-        #    # Not increase various time
-        #    if self.flap_lap:
-        #        self.lap+=1
-        #        self.flap_lap = False
-        #else:
-
-        #    self.flap_lap = True
-
-
-
-        # if self.pose.
         cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
                     1, (255, 255, 0))
         cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
@@ -216,8 +194,6 @@ class MyAlgorithm(threading.Thread):
 
     def stateOfMachine(self, state, actual_error, calc_error_actual, calc_previous_error):
         self.calc_error_inc = abs(calc_error_actual - calc_previous_error)
-        # print calc_error_actual - calc_previous_error
-        # print self.contVel
         velMax = 10.5
 
         # # Disacelerate
@@ -229,38 +205,38 @@ class MyAlgorithm(threading.Thread):
             self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
         elif state == "close curveL":
             self.vel = (1 - float(abs(actual_error[0])) / 100) * 2 + 6
-            Kwp = 0.000525
+            Kwp = 0.00525
             Kwd = 0.0003
             self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
 
         elif state == "straight":
-            self.vel = velMax+0.2*self.contVel
+            self.vel = velMax+0.1*self.contVel
             self.w = 0
 
-        elif state == "right" or state == "strong right":
-            Kvp = 0.005
+        elif state == "right":
+            Kvp = 0.007
             Kvd = 0.004
-            Kwp = -0.0055
-            Kwd = -0.0045
-            self.vel = 7 - Kvp * calc_error_actual - Kvd * self.calc_error_inc
+            Kwp = -0.00425
+            Kwd = -0.004
+            self.vel = 6 - Kvp * calc_error_actual - Kvd * self.calc_error_inc
             self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
-        elif state == "left" or state == "strong left":
+        elif state == "left":
 
-            Kvp = 0.0054
+            Kvp = 0.008
             Kvd = 0.004
-            Kwp = 0.0059
+            Kwp = 0.00425
             Kwd = 0.0045
-            self.vel = 7 - Kvp * calc_error_actual - Kvd * self.calc_error_inc
+            self.vel = 6 - Kvp * calc_error_actual - Kvd * self.calc_error_inc
             self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
 
         elif state == "close straightR":
-            self.vel = velMax+0.15*self.contVel
+            self.vel = velMax+0.1*self.contVel
             Kwp = -0.00045
             Kwd = -0.0003
             self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
 
         elif state == "close straightL":
-            self.vel = velMax+0.15*self.contVel
+            self.vel = velMax+0.1*self.contVel
             Kwp = 0.00045
             Kwd = 0.0003
             self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
@@ -286,8 +262,13 @@ class MyAlgorithm(threading.Thread):
                 self.w = Kwp * calc_error_actual + Kwd * self.calc_error_inc
 
         elif state == "not line":
-            self.w = 0.2
-            self.vel = -0.5
+            if self.previous_state == "left" or self.previous_state == "close curveL" or self.previous_state == "out curveL":
+                self.w = 0.5
+                self.vel = -2.75
+            else:
+                self.w = -0.5
+                self.vel = -2.75
+         
 
 
         self.motors.sendV(self.vel)
@@ -296,14 +277,8 @@ class MyAlgorithm(threading.Thread):
 
     def execute(self):
         # GETTING THE IMAGES
-        if self.flag_go:
-            self.time_go = time.clock()
-            self.initial_pose = self.pose_client.getPose3d()
-            self.flag_go = False
-
-
         imageRight = self.cameraR.getImage()
-        self.pose = self.pose_client.getPose3d()
+
 
         # Limitamos la imagen de entrada
         imageRight = imageRight.data
@@ -326,7 +301,7 @@ class MyAlgorithm(threading.Thread):
 
             # Get the 3 points which we use to calculate the error
             Npoint = MyAlgorithm.getNpoint(self, mycontour=line, N=3)
-            if self.min_p<350:
+            if self.min_p<400:
                 # Detect a good line
                 self.flag_no_line = False
             else:
@@ -357,6 +332,8 @@ class MyAlgorithm(threading.Thread):
 
         # If not detect a good line
         if self.flag_no_line:
+            if self.state != "not line":
+                self.previous_state = self.state
             self.state = "not line"
 
 
@@ -380,34 +357,3 @@ class MyAlgorithm(threading.Thread):
 
 
 
-
-
-'''
-    def getStatusImage(self, calc_error_actual, actual_error, calc_error_inc, state, vel, w):
-        out = np.zeros([480, 640, 3], dtype=np.uint8)
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(out, "%s" % (state), (10, 150), font, 2, (255, 255, 255),2)
-        cv2.putText(out, "v: %f" % (vel), (10, 225), font, 2, (0, 255, 255),2)
-        cv2.putText(out, "w: %f" % ( w), (10, 285), font, 2, (0, 255, 255),2)
-        # cv2.putText(out, "CalcErr: %2.f" % (calc_error_actual), (10, 250), font, 1, (255, 255, 0))
-        cv2.putText(out,"%02d:%02d"%(divmod(int(time.clock()-self.time_go),60)),(10, 360), font, 2, (0, 255, 0),2)
-        cv2.putText(out,"LAP: %02d"%(self.lap),(300, 360), font, 2, (0, 0, 255),2)
-        # Close to line lap
-        if  self.initial_pose.x/1000 - 0.5 < self.pose.x/1000 < self.initial_pose.x/1000 + 0.5 \
-                and self.initial_pose.y/1000  < self.pose.y/1000 < self.initial_pose.y/1000+2:
-            # Not increase various time
-            if self.flap_lap:
-                self.lap+=1
-                self.flap_lap = False
-        else:
-
-            self.flap_lap = True
-        # print self.lap
-
-
-        # if self.pose.
-        #cv2.putText(out, "Err: %2.f %2.f %2.f" % (actual_error[0], actual_error[1], actual_error[2]), (10, 300), font,
-        #            1, (255, 255, 0))
-        #cv2.putText(out, "inc: %2.f" % (calc_error_inc), (10, 350), font, 1, (255, 255, 0))
-        return out
-'''
